@@ -1,41 +1,77 @@
 import prisma from "../../domain/db/index.js";
-import Excel from "exceljs";
-import { writeFile } from 'fs/promises';
+import exceljs from "exceljs";
+import fs from "fs";
 
-// import { Workbook, Worksheet } from "exceljs";
-import pkg from 'exceljs';
-const { Workbook, Worksheet } = pkg;
 import { asyncHandler } from "./asyncHandler.js";
 
 export const convertToExcel = asyncHandler(async (req, res) => {
-	const users = await prisma.user.findMany();
-	const workbook = new Workbook();
-	const usersWorksheet = workbook.addWorksheet("Users");
-	const tasksWorksheet = workbook.addWorksheet("Tasks");
+	try {
+		const workbook = new exceljs.Workbook();
 
-	const userHeaders = Object.keys(users[0]).filter((key) => key !== "tasks");
-	usersWorksheet.addRow(userHeaders);
-	users.forEach((user) => {
-		usersWorksheet.addRow(
-			Object.values(user).filter(
-				(value, index) => userHeaders[index] !== "tasks"
-			)
-		);
+	const worksheetUser = workbook.addWorksheet("Users");
+	const worksheetTask = workbook.addWorksheet("Tasks");
+
+	const users = await prisma.user.findMany({
+		include: {
+			tasks: true,
+		},
 	});
 
-	const taskHeaders = Object.keys(users[0].tasks[0]).filter(
-		(key) => key !== "user"
-	);
-	tasksWorksheet.addRow(taskHeaders);
+	worksheetUser.columns = [
+		{ header: "ID", key: "id", width: 10 },
+		{ header: "Name", key: "name", width: 25 },
+		{ header: "Mobile", key: "mobile", width: 15 },
+		{ header: "Email", key: "email", width: 25 },
+	];
+
 	users.forEach((user) => {
-		user.tasks.forEach((task) => {
-			tasksWorksheet.addRow(
-				Object.values(task).filter(
-					(value, index) => taskHeaders[index] !== "user"
-				)
-			);
+		worksheetUser.addRow({
+			id: user.id,
+			name: user.name,
+			mobile: user.mobile,
+			email: user.email,
 		});
 	});
 
-	await writeFile("output.xlsx", await workbook.xlsx.writeBuffer());
+	worksheetTask.columns = [
+		{ header: "ID", key: "id", width: 10 },
+		{ header: "Name", key: "name", width: 25 },
+		{ header: "Type", key: "type", width: 15 },
+		{ header: "Status", key: "status", width: 15 },
+		{ header: "UserID", key: "userId", width: 15 },
+	];
+
+	users.forEach((user) => {
+		user.tasks.forEach((task) => {
+			worksheetTask.addRow({
+				id: task.id,
+				name: task.name,
+				type: task.type,
+				status: task.status,
+				userId: user.id,
+			});
+		});
+	});
+
+	const filename = "exported_data.xlsx";
+    await workbook.xlsx.writeFile(filename);
+
+    console.log(`Excel file "${filename}" successfully created`);
+
+    // Create a readable stream from the created file
+    const fileStream = fs.createReadStream(filename);
+
+    // Set the appropriate headers for the response
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    // Pipe the file stream to the response object
+    fileStream.pipe(res);
+	} catch (error) {
+		console.error("Error creating Excel file:", error);
+    res.status(500).json({ message: "Error creating Excel file" });
+	}
 });
