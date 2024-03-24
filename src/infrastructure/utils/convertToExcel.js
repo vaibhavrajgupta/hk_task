@@ -56,17 +56,17 @@ export const convertToExcel = asyncHandler(async (req, res) => {
 	const filename = "exported_data.xlsx";
     await workbook.xlsx.writeFile(filename);
 
-    console.log(`Excel file "${filename}" successfully created`);
+    res.setHeader(
+		"Content-Type",
+		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	);
+	res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
     // Create a readable stream from the created file
     const fileStream = fs.createReadStream(filename);
 
     // Set the appropriate headers for the response
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    // res.send("Excel Sheet created successfully");
 
     // Pipe the file stream to the response object
     fileStream.pipe(res);
